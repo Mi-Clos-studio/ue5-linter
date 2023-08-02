@@ -10,7 +10,7 @@ ULinterSettings::ULinterSettings(const FObjectInitializer& ObjectInitializer)
 {
 	if (DefaultLintRuleSet.IsNull())
 	{
-		static ConstructorHelpers::FObjectFinder<ULintRuleSet> DefaultMarketplaceRuleSetRef(TEXT("LintRuleSet'/Linter/MarketplaceLinter/MarketplaceLintRuleSet.MarketplaceLintRuleSet'"));
-		DefaultLintRuleSet = DefaultMarketplaceRuleSetRef.Object;
+		static ConstructorHelpers::FObjectFinder<ULintRuleSet> DefaultMiclosRuleSetRef(TEXT("LintRuleSet'/Linter/MiclosLinter/MiclosLinterRuleSet.MiclosLinterRuleSet'"));
+		DefaultLintRuleSet = DefaultMiclosRuleSetRef.Object;
 	}
 }
