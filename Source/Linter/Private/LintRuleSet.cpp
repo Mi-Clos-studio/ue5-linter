@@ -42,7 +42,15 @@ TArray<FLintRuleViolation> ULintRuleSet::LintPath(TArray<FString> AssetPaths, FS
 	for (const FString& AssetPath : AssetPaths)
 	{
 		UE_LOG(LogLinter, Display, TEXT("Adding path \"%s\" to be linted."), *AssetPath);
-		ARFilter.PackagePaths.Push(FName(*AssetPath));
+		// HACK : dirty way of detecting if it's a folder or object path, couldn't get DirectoryExists to work
+		if (!AssetPath.Contains("."))
+		{
+			ARFilter.PackagePaths.Push(FName(*AssetPath));
+		}
+		else
+		{
+			ARFilter.ObjectPaths.Push(FName(*AssetPath));
+		}
 	}
 
 	AssetRegistryModule.Get().GetAssets(ARFilter, AssetList);

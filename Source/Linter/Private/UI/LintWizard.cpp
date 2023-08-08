@@ -73,479 +73,482 @@ void SLintWizard::Construct(const FArguments& InArgs)
 	}
 
 	ChildSlot
-	[
-		SNew(SBorder)
-		.Padding(18)
+		[
+			SNew(SBorder)
+			.Padding(18)
 		.BorderImage(FEditorStyle::GetBrush("Docking.Tab.ContentAreaBrush"))
 		[
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot()
+		[
+			SAssignNew(MainWizard, SWizard)
+			.ShowPageList(false)
+		.ShowCancelButton(false)
+		.ButtonStyle(FEditorStyle::Get(), "FlatButton.Default")
+		.CancelButtonStyle(FEditorStyle::Get(), "FlatButton.Default")
+		.FinishButtonStyle(FEditorStyle::Get(), "FlatButton.Success")
+		.ButtonTextStyle(FEditorStyle::Get(), "LargeText")
+		.CanFinish(true)
+		.FinishButtonText(LOCTEXT("FinishButtonText", "Close"))
+		.OnFinished_Lambda([&]()
+		{
+			FGlobalTabmanager::Get()->FTabManager::TryInvokeTab(FName("LinterTab"))->RequestCloseTab();
+		})
+		// Skip the ruleset selection page, only use Miclos
+		/*
+		+ SWizard::Page()
+		.CanShow_Lambda([&]() { return RuleSets.Num() > 0; })
+		[
+			SNew(SVerticalBox)
+			// Title
+			+SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(0)
 			[
-				SAssignNew(MainWizard, SWizard)
-				.ShowPageList(false)
-				.ShowCancelButton(false)
-				.ButtonStyle(FEditorStyle::Get(), "FlatButton.Default")
-				.CancelButtonStyle(FEditorStyle::Get(), "FlatButton.Default")
-				.FinishButtonStyle(FEditorStyle::Get(), "FlatButton.Success")
-				.ButtonTextStyle(FEditorStyle::Get(), "LargeText")
-				.CanFinish(true)
-				.FinishButtonText(LOCTEXT("FinishButtonText", "Close"))
-				.OnFinished_Lambda([&]()
+				SNew(STextBlock)
+				.TextStyle( FEditorStyle::Get(), "NewClassDialog.PageTitle" )
+				.Text(LOCTEXT("LinterSelectionTitle", "Linter Rule Set Selection"))
+			]
+			// Title spacer
+			+SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(0, 2, 0, 8)
+			[
+				SNew(SSeparator)
+			]
+			// Linter Selection
+			+SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(PaddingAmount)
+			[
+				SAssignNew(RuleSetSelectionComboBox, SComboBox<TSharedPtr<FAssetData>>)
+				.OptionsSource(&RuleSets)
+				.InitiallySelectedItem(SelectedRuleSet)
+				.OnGenerateWidget_Lambda([&](TSharedPtr<FAssetData> LintRuleSet)
 				{
-					FGlobalTabmanager::Get()->FTabManager::TryInvokeTab(FName("LinterTab"))->RequestCloseTab();
+					ULintRuleSet* RuleSet = Cast<ULintRuleSet>(LintRuleSet->GetAsset());
+					if (RuleSet != nullptr)
+					{
+						return SNew(STextBlock).Text(RuleSet->RuleSetDescription.IsEmpty() ? FText::FromString(RuleSet->GetPathName()) : RuleSet->RuleSetDescription);
+					}
+					return SNew(STextBlock).Text(FText::FromString(TEXT("This Lint Rule Set Failed To Load? Uhhhh....")));
 				})
-				+ SWizard::Page()
-				.CanShow_Lambda([&]() { return RuleSets.Num() > 0; })
+				.OnSelectionChanged_Lambda([&](TSharedPtr<FAssetData> Item, ESelectInfo::Type SelectInfo) { SelectedRuleSet = Item; RuleSetSelectionComboBox->RefreshOptions(); })
+				.ContentPadding(4.0f)
 				[
-					SNew(SVerticalBox)
-					// Title
-					+SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(0)
-					[
-						SNew(STextBlock)
-						.TextStyle( FEditorStyle::Get(), "NewClassDialog.PageTitle" )
-						.Text(LOCTEXT("LinterSelectionTitle", "Linter Rule Set Selection"))
-					]
-					// Title spacer
-					+SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(0, 2, 0, 8)
-					[
-						SNew(SSeparator)
-					]
-					// Linter Selection
-					+SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(PaddingAmount)
-					[
-						SAssignNew(RuleSetSelectionComboBox, SComboBox<TSharedPtr<FAssetData>>)
-						.OptionsSource(&RuleSets)
-						.InitiallySelectedItem(SelectedRuleSet)
-						.OnGenerateWidget_Lambda([&](TSharedPtr<FAssetData> LintRuleSet)
-						{ 
-							ULintRuleSet* RuleSet = Cast<ULintRuleSet>(LintRuleSet->GetAsset());
-							if (RuleSet != nullptr)
-							{
-								return SNew(STextBlock).Text(RuleSet->RuleSetDescription.IsEmpty() ? FText::FromString(RuleSet->GetPathName()) : RuleSet->RuleSetDescription);
-							}
-							return SNew(STextBlock).Text(FText::FromString(TEXT("This Lint Rule Set Failed To Load? Uhhhh....")));							
-						})
-						.OnSelectionChanged_Lambda([&](TSharedPtr<FAssetData> Item, ESelectInfo::Type SelectInfo) { SelectedRuleSet = Item; RuleSetSelectionComboBox->RefreshOptions(); })
-						.ContentPadding(4.0f)
-						[
-							SNew(STextBlock)
-							.Text_Lambda([&]() { return SelectedRuleSet->GetAsset() != nullptr ? Cast<ULintRuleSet>(SelectedRuleSet->GetAsset())->RuleSetDescription : FText::GetEmpty(); })
-						]
-					]
-				]
-				// Lint Report
-				+ SWizard::Page()
-				.OnEnter(this, &SLintWizard::OnLintReportEntered)
-				.CanShow_Lambda([&]() { return RuleSets.Num() >= 1 && SelectedRuleSet.IsValid(); })
-				[
-					SNew(SVerticalBox)
-					// Title
-					+ SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(0)
-					[
-						SNew(STextBlock)
-						.TextStyle( FEditorStyle::Get(), "NewClassDialog.PageTitle" )
-						.Text(LOCTEXT("LinterReportTitle", "Lint Report"))
-					]
-					// Marketplace No Errors Required Text
-					+ SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(PaddingAmount)
-					[
-						SNew(STextBlock)
-						.Text(LOCTEXT("MarketplaceNoErrorsRequired", "The Epic Marketplace requires you to have zero linting errors before submission and approval."))
-						.Visibility_Lambda([&]() { return (LintReport.IsValid() && LintReport->bHasRanReport && LintReport->NumErrors > 0 && LintReport->LastUsedRuleSet != nullptr && LintReport->LastUsedRuleSet->bShowMarketplacePublishingInfoInLintWizard) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
-					]
-					// Title spacer
-					+SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(0, 2, 0, 8)
-					[
-						SNew(SSeparator)
-					]
-					// Linter Report
-					+SVerticalBox::Slot()
-					.FillHeight(1.0f)
-					.VAlign(VAlign_Fill)
-					.HAlign(HAlign_Fill)
-					.Padding(PaddingAmount)
-					[
-						SAssignNew(LintReport, SLintReport)
-					]
-				]
-				// Marketplace Info Page
-				+ SWizard::Page()
-				.OnEnter(this, &SLintWizard::OnMarketplaceRecommendationsEntered)
-				.CanShow_Lambda([&]() { return LintReport.IsValid() && LintReport->bHasRanReport && LintReport->NumErrors <= 0 && LintReport->LastUsedRuleSet != nullptr && LintReport->LastUsedRuleSet->bShowMarketplacePublishingInfoInLintWizard; })
-				[
-					SNew(SVerticalBox)
-					// Title
-					+SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(0)
-					[
-						SNew(STextBlock)
-						.TextStyle( FEditorStyle::Get(), "NewClassDialog.PageTitle" )
-						.Text(LOCTEXT("MarketplaceInfoTitle", "Marketplace Recommendations"))
-					]
-					// Title spacer
-					+SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(0, 2, 0, 8)
-					[
-						SNew(SSeparator)
-					]
-					+ SVerticalBox::Slot()
-					.FillHeight(1.0f)
-					[
-						SNew(SScrollBox)
-						+ SScrollBox::Slot()
-						[
-							SNew(SVerticalBox)
-							// Disclaimer
-							+ SVerticalBox::Slot()
-							.VAlign(VAlign_Top)
-							.AutoHeight()
-							[
-								SNew(SBorder)
-								.BorderImage(FEditorStyle::GetBrush("NoBorder"))
-								.Padding(PaddingAmount)
-								[
-									SNew(SBorder)
-									.BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
-									.Padding(PaddingAmount)
-									[
-										SNew(SHorizontalBox)
-										// Info image
-										+ SHorizontalBox::Slot()
-										.AutoWidth()
-										.VAlign(VAlign_Center)
-										.Padding(28.0f, 8.0f)
-										[
-											SNew(SImage).Image(FLinterStyle::Get()->GetBrush("Linter.Report.Info"))
-										]
-										// Disclaimer text
-										+SHorizontalBox::Slot()
-										.VAlign(VAlign_Center)
-										.FillWidth(1.0f)
-										[
-											SNew(SRichTextBlock)
-											.Text(LOCTEXT("SuccessDisclaimer", "This product has successfully passed the Marketplace Guidlines Linter scan. Please note, however, that this does not guarantee this product's acceptance onto the Marketplace. We also recommend that you take the following actions listed below."))
-											.AutoWrapText(true)
-											.TextStyle(FLinterStyle::Get(), "Linter.Report.DescriptionText")
-										]
-									]
-								]
-							]
-							// Fix Up Redirectors step widget
-							+ SVerticalBox::Slot()
-							.AutoHeight()
-							.VAlign(VAlign_Fill)
-							.HAlign(HAlign_Fill)
-							.Padding(PaddingAmount)
-							[
-								SNew(SStepWidget)
-								.StepName(LOCTEXT("FixUpRedirectsStepName", "Fix Up Redirectors"))
-								.StepDesc(LOCTEXT("FixUpRedirectsStepDesc", "Resave all packages that point to redirectors in your project, and delete those redirectors if able to resave all the things referencing them."))
-								.Icon(FLinterStyle::Get()->GetBrush("Linter.Step.FixUpRedirects.Thumbnail"))
-								.ShowStepStatusIcon(false)
-								.StepStatus_Lambda([this]() { return FixUpRedirectorStatus; })
-								.StepActionText(LOCTEXT("FixUpRedirectsStepAction", "Fix Up Redirectors"))
-								.OnPerformAction_Lambda([this](FScopedSlowTask& ScopedSlowTask)
-								{
-									FixUpRedirectorStatus = EStepStatus::InProgress;
-									bool bSuccess = true;
-
-									FAssetRegistryModule& AssetRegistryModule = FModuleManager::Get().LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
-									ScopedSlowTask.EnterProgressFrame(0, LOCTEXT("Linter.FixUpRedirects.FindingRedirectors", "Looking For redirectors..."));
-
-									// Form a filter from the paths
-									FARFilter Filter;
-									Filter.bRecursivePaths = true;
-									Filter.PackagePaths.Add("/Game");
-									Filter.ClassNames.Add("ObjectRedirector");
-
-									// Query for a list of assets in the selected paths
-									TArray<FAssetData> AssetList;
-									AssetRegistryModule.Get().GetAssets(Filter, AssetList);
-
-									if (AssetList.Num() > 0)
-									{
-										TArray<FString> ObjectPaths;
-										for (const auto& Asset : AssetList)
-										{
-											ObjectPaths.Add(Asset.ObjectPath.ToString());
-										}
-
-										ScopedSlowTask.EnterProgressFrame(0.25f, LOCTEXT("Linter.FixUpRedirects.LoadingRedirectors", "Loading redirectors..."));
-
-										TArray<UObject*> Objects;
-										if (LoadAssetsIfNeeded(ObjectPaths, Objects))
-										{
-											// Transform Objects array to ObjectRedirectors array
-											TArray<UObjectRedirector*> Redirectors;
-											for (auto Object : Objects)
-											{
-												auto Redirector = CastChecked<UObjectRedirector>(Object);
-												Redirectors.Add(Redirector);
-											}
-
-											ScopedSlowTask.EnterProgressFrame(0.25f, LOCTEXT("Linter.FixUpRedirects.LoadingRedirectors", "Fixing up redirectors..."));
-
-											// Load the asset tools module
-											const FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-											AssetToolsModule.Get().FixupReferencers(Redirectors);
-										}
-										else
-										{
-											FNotificationInfo NotificationInfo(LOCTEXT("FixUpRedirectorsFailed", "Linter failed to load an object redirector when trying to fix up all redirectors."));
-											NotificationInfo.ExpireDuration = 6.0f;
-											NotificationInfo.Hyperlink = FSimpleDelegate::CreateStatic([]() { FMessageLog("LoadErrors").Open(EMessageSeverity::Info, true); });
-											NotificationInfo.HyperlinkText = LOCTEXT("LoadObjectHyperlink", "Show Message Log");
-											FSlateNotificationManager::Get().AddNotification(NotificationInfo);
-											bSuccess = false;
-										}
-									}
-
-									FixUpRedirectorStatus = bSuccess ? EStepStatus::Success : EStepStatus::Error;
-								})
-							]
-							// Build Lighting Widget
-							+ SVerticalBox::Slot()
-							.Padding(PaddingAmount)
-							[
-								SNew(SBorder)
-								.BorderImage(FEditorStyle::GetBrush("NoBorder"))
-								.Padding(PaddingAmount)
-								.Visibility_Lambda([&](){ return (MapAssetDataList.Num() > 0) ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
-								[
-									SNew(SBorder)
-									.BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
-									.Padding(PaddingAmount)
-									[
-										SNew(SVerticalBox)
-										+ SVerticalBox::Slot()
-										.AutoHeight()
-										[
-											SNew(SHorizontalBox)
-											// Template thumbnail image
-											+ SHorizontalBox::Slot()
-											.Padding(4.0)
-											.AutoWidth()
-											.VAlign(VAlign_Top)
-											[
-												SNew(SImage)
-												.Image(FLinterStyle::Get()->GetBrush("Linter.Step.BuildLighting.Thumbnail"))
-											]
-											// Template name and description
-											+ SHorizontalBox::Slot()
-											[
-												SNew(SVerticalBox)
-												+ SVerticalBox::Slot()
-												.AutoHeight()
-												.Padding(PaddingAmount)
-												[
-													SNew(STextBlock)
-													.Text(LOCTEXT("BuildLightingStepName", "Build Lighting and Run Map Check"))
-													.TextStyle(FLinterStyle::Get(), "Linter.Report.RuleTitle")
-												]
-
-												+ SVerticalBox::Slot()
-												.AutoHeight()
-												.Padding(PaddingAmount)
-												[
-													SNew(SRichTextBlock)
-													.Text(LOCTEXT("BuildLightingStepDesc", "Open each map listed below and click Map Check in the Build Options Menu of the Level Editor Toolbar. If any Map Check errors are generated, resolve them before packaging your project. If any 'LIGHTING NEEDS TO BE REBUILT' errors are present press Ctrl+Shift+Semicolon to rebuild lighting."))
-													.TextStyle(FLinterStyle::Get(), "Linter.Report.DescriptionText")
-													.AutoWrapText(true)
-												]
-											]
-										]
-										+ SVerticalBox::Slot()
-										.AutoHeight()
-										[
-											SNew(SSeparator)
-										]
-										+ SVerticalBox::Slot()
-										.VAlign(VAlign_Fill)
-										.FillHeight(1.0f)
-										.Padding(PaddingAmount)
-										[
-											SAssignNew(MarketplaceRecommendationMapScrollBoxPtr, SScrollBox)
-											.ScrollBarAlwaysVisible(true)
-										]
-									]
-								]
-							]
-							// Save All Step
-							+ SVerticalBox::Slot()
-							.Padding(PaddingAmount)
-							.AutoHeight()
-							[
-								SNew(SStepWidget)
-								.StepName(LOCTEXT("SaveAllStepName", "Save All"))
-								.StepDesc(LOCTEXT("SaveAllStepDesc", "Save all unsaved levels and assets to disk."))
-								.Icon(FLinterStyle::Get()->GetBrush("Linter.Step.SaveAll.Thumbnail"))
-								.ShowStepStatusIcon(false)
-								.StepStatus_Lambda([this]() { return SaveAllStatus; })
-								.StepActionText(LOCTEXT("SaveAllStepNameAction", "Save All"))
-								.OnPerformAction_Lambda([this](FScopedSlowTask& ScopedSlowTask)
-								{
-									SaveAllStatus = EStepStatus::InProgress;
-
-									// Taken from MainFrameActions.cpp SaveAll
-									const bool bPromptUserToSave = false;
-									const bool bSaveMapPackages = true;
-									const bool bSaveContentPackages = true;
-									const bool bFastSave = false;
-									const bool bNotifyNoPackagesSaved = false;
-									const bool bCanBeDeclined = false;
-									if (FEditorFileUtils::SaveDirtyPackages(bPromptUserToSave, bSaveMapPackages, bSaveContentPackages, bFastSave, bNotifyNoPackagesSaved, bCanBeDeclined))
-									{
-										SaveAllStatus = EStepStatus::Success;
-									}
-									else
-									{
-										FNotificationInfo NotificationInfo(LOCTEXT("SaveAllFailed", "Linter failed to save all dirty assets!"));
-										NotificationInfo.ExpireDuration = 6.0f;
-										NotificationInfo.Hyperlink = FSimpleDelegate::CreateStatic([]() { FMessageLog("LoadErrors").Open(EMessageSeverity::Info, true); });
-										NotificationInfo.HyperlinkText = LOCTEXT("LoadObjectHyperlink", "Show Message Log");
-										FSlateNotificationManager::Get().AddNotification(NotificationInfo);
-										SaveAllStatus = EStepStatus::Error;
-									}					
-								})
-							]
-							// Package Project step
-							+ SVerticalBox::Slot()
-							.Padding(PaddingAmount)
-							.AutoHeight()
-							[
-								SNew(SBorder)
-								.Visibility(EVisibility::Collapsed)
-								.BorderImage(FEditorStyle::GetBrush("NoBorder"))
-								.Padding(PaddingAmount)
-								[
-									SNew(SBorder)
-									.BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
-									.Padding(PaddingAmount)
-									[
-										SNew(SVerticalBox)
-										+ SVerticalBox::Slot()
-										[
-											SNew(SHorizontalBox)
-											+ SHorizontalBox::Slot()
-											.Padding(4.0)
-											.AutoWidth()
-											.VAlign(VAlign_Top)
-											[
-												SNew(SImage)
-												.Image(FLinterStyle::Get()->GetBrush("Linter.Step.Package.Thumbnail"))
-											]
-											+ SHorizontalBox::Slot()
-											[
-												SNew(SVerticalBox)
-												+ SVerticalBox::Slot()
-												.AutoHeight()
-												.Padding(PaddingAmount)
-												[
-													SNew(STextBlock)
-													.Text(LOCTEXT("PackageProduct", "Package Product to .Zip"))
-													.TextStyle(FLinterStyle::Get(), "Linter.Report.RuleTitle")
-												]
-
-												+ SVerticalBox::Slot()
-												.AutoHeight()
-												.Padding(PaddingAmount)
-												[
-													SNew(SRichTextBlock)
-													.Text(LOCTEXT("PackageProductDesc", "Upload this .zip file to a hosting site (GoogleDrive/Dropbox/etc.) and enter the download URL as the associated product's Project File Link in the Publisher Portal."))
-													.TextStyle(FLinterStyle::Get(), "Linter.Report.DescriptionText")
-													.AutoWrapText(true)
-												]
-												+ SVerticalBox::Slot()
-												.AutoHeight()
-												.Padding(PaddingAmount)
-												[
-													SNew(SHorizontalBox)
-													+ SHorizontalBox::Slot()
-													.AutoWidth()
-													[
-														SNew(SButton)
-														.OnClicked_Lambda([&]()
-														{
-		#if PLATFORM_WINDOWS
-															FText PlatformName = LOCTEXT("PlatformName_Windows", "Windows");
-		#elif PLATFORM_MAC
-															FText PlatformName = LOCTEXT("PlatformName_Mac", "Mac");
-		#elif PLATFORM_LINUX
-															FText PlatformName = LOCTEXT("PlatformName_Linux", "Linux");
-		#else
-															FText PlatformName = LOCTEXT("PlatformName_Other", "Other OS");
-		#endif
-
-															bool bOpened = false;
-															TArray<FString> SaveFilenames;
-															IDesktopPlatform* DesktopPlatform = FDesktopPlatformModule::Get();
-															if (DesktopPlatform != NULL)
-															{
-																bOpened = DesktopPlatform->SaveFileDialog(
-																	NULL,
-																	NSLOCTEXT("UnrealEd", "ZipUpProject", "Zip file location").ToString(),
-																	FPaths::ProjectDir(),
-																	FApp::GetProjectName(),
-																	TEXT("Zip file|*.zip"),
-																	EFileDialogFlags::None,
-																	SaveFilenames);
-															}
-
-															// We never want to compile editor targets when invoking UAT in this context.
-															// If we are installed or don't have a compiler, we must assume we have a precompiled UAT.
-															const TCHAR* UATFlags = (FApp::GetEngineIsPromotedBuild() || FApp::IsEngineInstalled())
-																? TEXT("-nocompile -nocompileeditor")
-																: TEXT("-nocompileeditor");
-
-															if (bOpened)
-															{
-																for (FString FileName : SaveFilenames)
-																{
-																	// Ensure path is full rather than relative (for macs)
-																	FString FinalFileName = FPaths::ConvertRelativePathToFull(FileName);
-																	FString ProjectPath = FPaths::IsProjectFilePathSet() ? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()) : FPaths::RootDir() / FApp::GetProjectName();
-
-																	FString CommandLine = FString::Printf(TEXT("ZipProjectUp %s -project=\"%s\" -install=\"%s\""), UATFlags, *ProjectPath, *FinalFileName);
-
-																	IUATHelperModule::Get().CreateUatTask(CommandLine, PlatformName, LOCTEXT("ZipTaskName", "Zipping Up Project"),
-																		LOCTEXT("ZipTaskShortName", "Zip Project Task"), FEditorStyle::GetBrush(TEXT("MainFrame.CookContent")));
-																}
-
-																FGlobalTabmanager::Get()->FTabManager::TryInvokeTab(FName("LinterTab"))->RequestCloseTab();
-															}
-															return FReply::Handled();
-														})
-														[
-															SNew(STextBlock)
-															.Text(LOCTEXT("SelectOutputFolder", "Package Project into a .zip"))
-														]
-													]
-												]
-											]
-										]
-									]
-								]
-							]
-						]
-					]
+					SNew(STextBlock)
+					.Text_Lambda([&]() { return SelectedRuleSet->GetAsset() != nullptr ? Cast<ULintRuleSet>(SelectedRuleSet->GetAsset())->RuleSetDescription : FText::GetEmpty(); })
 				]
 			]
 		]
-	];
+		*/
+		// Lint Report
+			+SWizard::Page()
+			.OnEnter(this, &SLintWizard::OnLintReportEntered)
+			.CanShow_Lambda([&]() { return RuleSets.Num() >= 1 && SelectedRuleSet.IsValid(); })
+			[
+				SNew(SVerticalBox)
+				// Title
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(0)
+			[
+				SNew(STextBlock)
+				.TextStyle(FEditorStyle::Get(), "NewClassDialog.PageTitle")
+			.Text(LOCTEXT("LinterReportTitle", "Lint Report"))
+			]
+		// Marketplace No Errors Required Text
+		+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(PaddingAmount)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("MarketplaceNoErrorsRequired", "The Epic Marketplace requires you to have zero linting errors before submission and approval."))
+			.Visibility_Lambda([&]() { return (LintReport.IsValid() && LintReport->bHasRanReport && LintReport->NumErrors > 0 && LintReport->LastUsedRuleSet != nullptr && LintReport->LastUsedRuleSet->bShowMarketplacePublishingInfoInLintWizard) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+			]
+		// Title spacer
+		+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(0, 2, 0, 8)
+			[
+				SNew(SSeparator)
+			]
+		// Linter Report
+		+ SVerticalBox::Slot()
+			.FillHeight(1.0f)
+			.VAlign(VAlign_Fill)
+			.HAlign(HAlign_Fill)
+			.Padding(PaddingAmount)
+			[
+				SAssignNew(LintReport, SLintReport)
+			]
+			]
+		// Marketplace Info Page
+		+ SWizard::Page()
+			.OnEnter(this, &SLintWizard::OnMarketplaceRecommendationsEntered)
+			.CanShow_Lambda([&]() { return LintReport.IsValid() && LintReport->bHasRanReport && LintReport->NumErrors <= 0 && LintReport->LastUsedRuleSet != nullptr && LintReport->LastUsedRuleSet->bShowMarketplacePublishingInfoInLintWizard; })
+			[
+				SNew(SVerticalBox)
+				// Title
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(0)
+			[
+				SNew(STextBlock)
+				.TextStyle(FEditorStyle::Get(), "NewClassDialog.PageTitle")
+			.Text(LOCTEXT("MarketplaceInfoTitle", "Marketplace Recommendations"))
+			]
+		// Title spacer
+		+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(0, 2, 0, 8)
+			[
+				SNew(SSeparator)
+			]
+		+ SVerticalBox::Slot()
+			.FillHeight(1.0f)
+			[
+				SNew(SScrollBox)
+				+ SScrollBox::Slot()
+			[
+				SNew(SVerticalBox)
+				// Disclaimer
+			+ SVerticalBox::Slot()
+			.VAlign(VAlign_Top)
+			.AutoHeight()
+			[
+				SNew(SBorder)
+				.BorderImage(FEditorStyle::GetBrush("NoBorder"))
+			.Padding(PaddingAmount)
+			[
+				SNew(SBorder)
+				.BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+			.Padding(PaddingAmount)
+			[
+				SNew(SHorizontalBox)
+				// Info image
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			.Padding(28.0f, 8.0f)
+			[
+				SNew(SImage).Image(FLinterStyle::Get()->GetBrush("Linter.Report.Info"))
+			]
+		// Disclaimer text
+		+ SHorizontalBox::Slot()
+			.VAlign(VAlign_Center)
+			.FillWidth(1.0f)
+			[
+				SNew(SRichTextBlock)
+				.Text(LOCTEXT("SuccessDisclaimer", "This product has successfully passed the Marketplace Guidlines Linter scan. Please note, however, that this does not guarantee this product's acceptance onto the Marketplace. We also recommend that you take the following actions listed below."))
+			.AutoWrapText(true)
+			.TextStyle(FLinterStyle::Get(), "Linter.Report.DescriptionText")
+			]
+			]
+			]
+			]
+		// Fix Up Redirectors step widget
+		+ SVerticalBox::Slot()
+			.AutoHeight()
+			.VAlign(VAlign_Fill)
+			.HAlign(HAlign_Fill)
+			.Padding(PaddingAmount)
+			[
+				SNew(SStepWidget)
+				.StepName(LOCTEXT("FixUpRedirectsStepName", "Fix Up Redirectors"))
+			.StepDesc(LOCTEXT("FixUpRedirectsStepDesc", "Resave all packages that point to redirectors in your project, and delete those redirectors if able to resave all the things referencing them."))
+			.Icon(FLinterStyle::Get()->GetBrush("Linter.Step.FixUpRedirects.Thumbnail"))
+			.ShowStepStatusIcon(false)
+			.StepStatus_Lambda([this]() { return FixUpRedirectorStatus; })
+			.StepActionText(LOCTEXT("FixUpRedirectsStepAction", "Fix Up Redirectors"))
+			.OnPerformAction_Lambda([this](FScopedSlowTask& ScopedSlowTask)
+			{
+				FixUpRedirectorStatus = EStepStatus::InProgress;
+				bool bSuccess = true;
+
+				FAssetRegistryModule& AssetRegistryModule = FModuleManager::Get().LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+				ScopedSlowTask.EnterProgressFrame(0, LOCTEXT("Linter.FixUpRedirects.FindingRedirectors", "Looking For redirectors..."));
+
+				// Form a filter from the paths
+				FARFilter Filter;
+				Filter.bRecursivePaths = true;
+				Filter.PackagePaths.Add("/Game");
+				Filter.ClassNames.Add("ObjectRedirector");
+
+				// Query for a list of assets in the selected paths
+				TArray<FAssetData> AssetList;
+				AssetRegistryModule.Get().GetAssets(Filter, AssetList);
+
+				if (AssetList.Num() > 0)
+				{
+					TArray<FString> ObjectPaths;
+					for (const auto& Asset : AssetList)
+					{
+						ObjectPaths.Add(Asset.ObjectPath.ToString());
+					}
+
+					ScopedSlowTask.EnterProgressFrame(0.25f, LOCTEXT("Linter.FixUpRedirects.LoadingRedirectors", "Loading redirectors..."));
+
+					TArray<UObject*> Objects;
+					if (LoadAssetsIfNeeded(ObjectPaths, Objects))
+					{
+						// Transform Objects array to ObjectRedirectors array
+						TArray<UObjectRedirector*> Redirectors;
+						for (auto Object : Objects)
+						{
+							auto Redirector = CastChecked<UObjectRedirector>(Object);
+							Redirectors.Add(Redirector);
+						}
+
+						ScopedSlowTask.EnterProgressFrame(0.25f, LOCTEXT("Linter.FixUpRedirects.LoadingRedirectors", "Fixing up redirectors..."));
+
+						// Load the asset tools module
+						const FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+						AssetToolsModule.Get().FixupReferencers(Redirectors);
+					}
+					else
+					{
+						FNotificationInfo NotificationInfo(LOCTEXT("FixUpRedirectorsFailed", "Linter failed to load an object redirector when trying to fix up all redirectors."));
+						NotificationInfo.ExpireDuration = 6.0f;
+						NotificationInfo.Hyperlink = FSimpleDelegate::CreateStatic([]() { FMessageLog("LoadErrors").Open(EMessageSeverity::Info, true); });
+						NotificationInfo.HyperlinkText = LOCTEXT("LoadObjectHyperlink", "Show Message Log");
+						FSlateNotificationManager::Get().AddNotification(NotificationInfo);
+						bSuccess = false;
+					}
+				}
+
+				FixUpRedirectorStatus = bSuccess ? EStepStatus::Success : EStepStatus::Error;
+			})
+			]
+		// Build Lighting Widget
+		+ SVerticalBox::Slot()
+			.Padding(PaddingAmount)
+			[
+				SNew(SBorder)
+				.BorderImage(FEditorStyle::GetBrush("NoBorder"))
+			.Padding(PaddingAmount)
+			.Visibility_Lambda([&]() { return (MapAssetDataList.Num() > 0) ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
+			[
+				SNew(SBorder)
+				.BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+			.Padding(PaddingAmount)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot()
+			.AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				// Template thumbnail image
+			+ SHorizontalBox::Slot()
+			.Padding(4.0)
+			.AutoWidth()
+			.VAlign(VAlign_Top)
+			[
+				SNew(SImage)
+				.Image(FLinterStyle::Get()->GetBrush("Linter.Step.BuildLighting.Thumbnail"))
+			]
+		// Template name and description
+		+ SHorizontalBox::Slot()
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(PaddingAmount)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("BuildLightingStepName", "Build Lighting and Run Map Check"))
+			.TextStyle(FLinterStyle::Get(), "Linter.Report.RuleTitle")
+			]
+
+		+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(PaddingAmount)
+			[
+				SNew(SRichTextBlock)
+				.Text(LOCTEXT("BuildLightingStepDesc", "Open each map listed below and click Map Check in the Build Options Menu of the Level Editor Toolbar. If any Map Check errors are generated, resolve them before packaging your project. If any 'LIGHTING NEEDS TO BE REBUILT' errors are present press Ctrl+Shift+Semicolon to rebuild lighting."))
+			.TextStyle(FLinterStyle::Get(), "Linter.Report.DescriptionText")
+			.AutoWrapText(true)
+			]
+			]
+			]
+		+ SVerticalBox::Slot()
+			.AutoHeight()
+			[
+				SNew(SSeparator)
+			]
+		+ SVerticalBox::Slot()
+			.VAlign(VAlign_Fill)
+			.FillHeight(1.0f)
+			.Padding(PaddingAmount)
+			[
+				SAssignNew(MarketplaceRecommendationMapScrollBoxPtr, SScrollBox)
+				.ScrollBarAlwaysVisible(true)
+			]
+			]
+			]
+			]
+		// Save All Step
+		+ SVerticalBox::Slot()
+			.Padding(PaddingAmount)
+			.AutoHeight()
+			[
+				SNew(SStepWidget)
+				.StepName(LOCTEXT("SaveAllStepName", "Save All"))
+			.StepDesc(LOCTEXT("SaveAllStepDesc", "Save all unsaved levels and assets to disk."))
+			.Icon(FLinterStyle::Get()->GetBrush("Linter.Step.SaveAll.Thumbnail"))
+			.ShowStepStatusIcon(false)
+			.StepStatus_Lambda([this]() { return SaveAllStatus; })
+			.StepActionText(LOCTEXT("SaveAllStepNameAction", "Save All"))
+			.OnPerformAction_Lambda([this](FScopedSlowTask& ScopedSlowTask)
+			{
+				SaveAllStatus = EStepStatus::InProgress;
+
+				// Taken from MainFrameActions.cpp SaveAll
+				const bool bPromptUserToSave = false;
+				const bool bSaveMapPackages = true;
+				const bool bSaveContentPackages = true;
+				const bool bFastSave = false;
+				const bool bNotifyNoPackagesSaved = false;
+				const bool bCanBeDeclined = false;
+				if (FEditorFileUtils::SaveDirtyPackages(bPromptUserToSave, bSaveMapPackages, bSaveContentPackages, bFastSave, bNotifyNoPackagesSaved, bCanBeDeclined))
+				{
+					SaveAllStatus = EStepStatus::Success;
+				}
+				else
+				{
+					FNotificationInfo NotificationInfo(LOCTEXT("SaveAllFailed", "Linter failed to save all dirty assets!"));
+					NotificationInfo.ExpireDuration = 6.0f;
+					NotificationInfo.Hyperlink = FSimpleDelegate::CreateStatic([]() { FMessageLog("LoadErrors").Open(EMessageSeverity::Info, true); });
+					NotificationInfo.HyperlinkText = LOCTEXT("LoadObjectHyperlink", "Show Message Log");
+					FSlateNotificationManager::Get().AddNotification(NotificationInfo);
+					SaveAllStatus = EStepStatus::Error;
+				}
+			})
+			]
+		// Package Project step
+		+ SVerticalBox::Slot()
+			.Padding(PaddingAmount)
+			.AutoHeight()
+			[
+				SNew(SBorder)
+				.Visibility(EVisibility::Collapsed)
+			.BorderImage(FEditorStyle::GetBrush("NoBorder"))
+			.Padding(PaddingAmount)
+			[
+				SNew(SBorder)
+				.BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+			.Padding(PaddingAmount)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+			.Padding(4.0)
+			.AutoWidth()
+			.VAlign(VAlign_Top)
+			[
+				SNew(SImage)
+				.Image(FLinterStyle::Get()->GetBrush("Linter.Step.Package.Thumbnail"))
+			]
+		+ SHorizontalBox::Slot()
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(PaddingAmount)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("PackageProduct", "Package Product to .Zip"))
+			.TextStyle(FLinterStyle::Get(), "Linter.Report.RuleTitle")
+			]
+
+		+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(PaddingAmount)
+			[
+				SNew(SRichTextBlock)
+				.Text(LOCTEXT("PackageProductDesc", "Upload this .zip file to a hosting site (GoogleDrive/Dropbox/etc.) and enter the download URL as the associated product's Project File Link in the Publisher Portal."))
+			.TextStyle(FLinterStyle::Get(), "Linter.Report.DescriptionText")
+			.AutoWrapText(true)
+			]
+		+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(PaddingAmount)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+			.AutoWidth()
+			[
+				SNew(SButton)
+				.OnClicked_Lambda([&]()
+				{
+#if PLATFORM_WINDOWS
+					FText PlatformName = LOCTEXT("PlatformName_Windows", "Windows");
+#elif PLATFORM_MAC
+					FText PlatformName = LOCTEXT("PlatformName_Mac", "Mac");
+#elif PLATFORM_LINUX
+					FText PlatformName = LOCTEXT("PlatformName_Linux", "Linux");
+#else
+					FText PlatformName = LOCTEXT("PlatformName_Other", "Other OS");
+#endif
+
+					bool bOpened = false;
+					TArray<FString> SaveFilenames;
+					IDesktopPlatform* DesktopPlatform = FDesktopPlatformModule::Get();
+					if (DesktopPlatform != NULL)
+					{
+						bOpened = DesktopPlatform->SaveFileDialog(
+							NULL,
+							NSLOCTEXT("UnrealEd", "ZipUpProject", "Zip file location").ToString(),
+							FPaths::ProjectDir(),
+							FApp::GetProjectName(),
+							TEXT("Zip file|*.zip"),
+							EFileDialogFlags::None,
+							SaveFilenames);
+					}
+
+					// We never want to compile editor targets when invoking UAT in this context.
+					// If we are installed or don't have a compiler, we must assume we have a precompiled UAT.
+					const TCHAR* UATFlags = (FApp::GetEngineIsPromotedBuild() || FApp::IsEngineInstalled())
+						? TEXT("-nocompile -nocompileeditor")
+						: TEXT("-nocompileeditor");
+
+					if (bOpened)
+					{
+						for (FString FileName : SaveFilenames)
+						{
+							// Ensure path is full rather than relative (for macs)
+							FString FinalFileName = FPaths::ConvertRelativePathToFull(FileName);
+							FString ProjectPath = FPaths::IsProjectFilePathSet() ? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()) : FPaths::RootDir() / FApp::GetProjectName();
+
+							FString CommandLine = FString::Printf(TEXT("ZipProjectUp %s -project=\"%s\" -install=\"%s\""), UATFlags, *ProjectPath, *FinalFileName);
+
+							IUATHelperModule::Get().CreateUatTask(CommandLine, PlatformName, LOCTEXT("ZipTaskName", "Zipping Up Project"),
+								LOCTEXT("ZipTaskShortName", "Zip Project Task"), FEditorStyle::GetBrush(TEXT("MainFrame.CookContent")));
+						}
+
+						FGlobalTabmanager::Get()->FTabManager::TryInvokeTab(FName("LinterTab"))->RequestCloseTab();
+					}
+					return FReply::Handled();
+				})
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("SelectOutputFolder", "Package Project into a .zip"))
+			]
+			]
+			]
+			]
+			]
+			]
+			]
+			]
+			]
+			]
+			]
+		]
+		]
+		];
 
 	// Determine all levels in the project for wizard purposes
 	FContentBrowserModule& ContentBrowserModule = FModuleManager::Get().LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
@@ -562,13 +565,13 @@ void SLintWizard::Construct(const FArguments& InArgs)
 		MapAssetDataList.Add(MakeShareable(new FAssetData(Asset)));
 
 		MarketplaceRecommendationMapScrollBoxPtr.Get()->AddSlot()
-		.HAlign(HAlign_Fill)
-		.VAlign(VAlign_Fill)
-		.Padding(PaddingAmount)
-		[
-			SNew(SAssetLinkWidget)
-			.AssetData(Asset)
-		];
+			.HAlign(HAlign_Fill)
+			.VAlign(VAlign_Fill)
+			.Padding(PaddingAmount)
+			[
+				SNew(SAssetLinkWidget)
+				.AssetData(Asset)
+			];
 	}
 }
 END_SLATE_FUNCTION_BUILD_OPTIMIZATION

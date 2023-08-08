@@ -67,6 +67,11 @@ void FLinterModule::StartupModule()
 		FPropertyEditorModule& PropertyModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
 		PropertyModule.RegisterCustomClassLayout(ULinterNamingConvention::StaticClass()->GetFName(), FOnGetDetailCustomizationInstance::CreateStatic(&FLinterNamingConventionDetails::MakeInstance));
 	}
+
+#if WITH_EDITOR
+	// Subscribe to event telling us objects are being saved
+	FCoreUObjectDelegates::OnObjectPreSave.AddRaw(this, &FLinterModule::OnObjectSaved);
+#endif // WITH_EDITOR
 }
 
 void FLinterModule::ShutdownModule()
@@ -96,6 +101,27 @@ void FLinterModule::ShutdownModule()
 	}
 }
 
+void FLinterModule::Tick(float DeltaTime)
+{
+	if (SavedObjectPaths.Num() > 0)
+	{
+		FLinterModule& LinterModule = FModuleManager::LoadModuleChecked<FLinterModule>(TEXT("Linter"));
+		LinterModule.SetDesiredLintPaths(SavedObjectPaths);
+		FGlobalTabmanager::Get()->FTabManager::TryInvokeTab(FName("LinterTab"));
+
+		SavedObjectPaths.Empty();
+	}
+}
+
+bool FLinterModule::IsTickable() const
+{
+	return true;
+}
+
+TStatId FLinterModule::GetStatId() const
+{
+	return 0;
+}
 
 TSharedRef<SDockTab> FLinterModule::SpawnTab(const FSpawnTabArgs& TabSpawnArgs, TSharedPtr<FSlateStyleSet> StyleSet)
 {
@@ -108,6 +134,40 @@ TSharedRef<SDockTab> FLinterModule::SpawnTab(const FSpawnTabArgs& TabSpawnArgs, 
 	MajorTab->SetContent(SNew(SLintWizard));
 
 	return MajorTab;
+}
+
+void FLinterModule::OnObjectSaved(UObject* SavedObject, FObjectPreSaveContext SaveContext)
+{
+	int NumErrors = 0;
+	int NumWarnings = 0;
+
+	ULintRuleSet* SelectedLintRuleSet = GetDefault<ULinterSettings>()->DefaultLintRuleSet.LoadSynchronous();
+	FLinterModule& LinterModule = FModuleManager::LoadModuleChecked<FLinterModule>(TEXT("Linter"));
+
+	TArray<FString> LintPaths;
+	LintPaths.Add(SavedObject->GetPathName());
+
+	FScopedSlowTask SlowTask(0, LOCTEXT("LintingInProgress", "Linting Assets..."));
+	SlowTask.MakeDialog(false);
+
+	TArray<TSharedPtr<FLintRuleViolation>> RuleViolations = SelectedLintRuleSet->LintPathShared(LintPaths, &SlowTask);
+
+	for (TSharedPtr<FLintRuleViolation> Violation : RuleViolations)
+	{
+		if (Violation->ViolatedRule->GetDefaultObject<ULintRule>()->RuleSeverity <= ELintRuleSeverity::Error)
+		{
+			NumErrors++;
+		}
+		else
+		{
+			NumWarnings++;
+		}
+	}
+
+	if (NumErrors > 0 || NumWarnings > 0)
+	{
+		SavedObjectPaths.AddUnique(LintPaths[0]);
+	}
 }
 
 void FLinterModule::OnInitialAssetRegistrySearchComplete()

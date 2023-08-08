@@ -7,18 +7,24 @@
 #include "Widgets/Docking/SDockTab.h"
 #include "Styling/SlateStyle.h"
 
+
+#include "UObject/ObjectSaveContext.h"
+
 class FLinterManagerBase;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogLinter, Verbose, All);
 DECLARE_LOG_CATEGORY_EXTERN(LogCommandlet, All, All);
 
-class LINTER_API FLinterModule : public IModuleInterface
+class LINTER_API FLinterModule : public IModuleInterface, public FTickableEditorObject
 {
 public:
 
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+	virtual void Tick(float DeltaTime) override;
+	virtual bool IsTickable() const override;
+	virtual TStatId GetStatId() const override;
 
 	static TSharedRef<SDockTab> SpawnTab(const FSpawnTabArgs& TabSpawnArgs, TSharedPtr<FSlateStyleSet> StyleSet);
 
@@ -51,6 +57,11 @@ private:
 	FDelegateHandle AssetExtenderDelegateHandle;
 
 	TArray<FString> DesiredLintPaths;
+
+	void OnObjectSaved(UObject* objectSaved, FObjectPreSaveContext context);
+
+	TArray<FString> SavedObjectPaths;
+
 public:
 	void OnInitialAssetRegistrySearchComplete();
 	static void TryToLoadAllLintRuleSets();
